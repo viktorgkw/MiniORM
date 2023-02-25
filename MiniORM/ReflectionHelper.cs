@@ -1,6 +1,6 @@
-﻿using System.Reflection;
+﻿namespace MiniORM;
 
-namespace MiniORM;
+using System.Reflection;
 
 internal static class ReflectionHelper
 {

@@ -1,7 +1,7 @@
-﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.Data.SqlClient;
+﻿namespace MiniORM;
 
-namespace MiniORM;
+using System.ComponentModel.DataAnnotations;
+using Microsoft.Data.SqlClient;
 
 /// <summary>
 /// Used for accessing a database, inserting/updating/deleting entities
