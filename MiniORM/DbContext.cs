@@ -98,9 +98,14 @@ public abstract class DbContext
         }
     }
 
-    private bool IsObjectValid(object e)
+    private bool IsObjectValid(object o)
     {
-        throw new NotImplementedException();
+        ValidationContext validationContext = new ValidationContext(o);
+        ICollection<ValidationResult> errors = new List<ValidationResult>();
+
+        bool validationResult = Validator.TryValidateObject(o, validationContext, errors, true);
+
+        return validationResult;
     }
 
     private void Persist<TEntity>(DbSet<TEntity> dbSet)
@@ -129,14 +134,27 @@ public abstract class DbContext
         }
     }
 
-    private string GetTableName(Type type)
+    private string GetTableName(Type tableType)
     {
-        throw new NotImplementedException();
+        string tableName = tableType.GetCustomAttribute<TableAttribute>().Name;
+
+        if (tableType is null)
+        {
+            tableName = this._dbSetProperties[tableType].Name;
+        }
+
+        return tableName;
     }
 
     private IDictionary<Type, PropertyInfo> DicoverDbSets()
     {
-        throw new NotImplementedException();
+        IDictionary<Type, PropertyInfo> dbSets = this.GetType()
+            .GetProperties()
+            .Where(pi => pi.PropertyType.GetGenericTypeDefinition() == typeof(DbSet<>))
+            .ToDictionary(key => key.PropertyType.GetGenericArguments().First(),
+                        val => val);
+
+        return dbSets;
     }
 
     private void InitializeDbSets()
@@ -167,7 +185,33 @@ public abstract class DbContext
     private IEnumerable<TEntity> LoadTableEntities<TEntity>()
         where TEntity : class, new()
     {
-        throw new NotImplementedException();
+        var entityType = typeof(TEntity);
+        string[] columns = this.GetEntityColumnNames(entityType);
+        string tableName = this.GetTableName(entityType);
+
+        IEnumerable<TEntity> fetchedRows = this._connection
+            .FetchResultSet<TEntity>(tableName, columns);
+
+        return fetchedRows;
+    }
+
+    private string[] GetEntityColumnNames(Type entityType)
+    {
+        string tableName = this.GetTableName(entityType);
+
+        string[] dbColumns = this._connection
+            .FetchColumnNames(tableName)
+            .ToArray();
+
+        string[] columns = entityType
+            .GetProperties()
+            .Where(pi => dbColumns.Contains(pi.Name) &&
+                !pi.HasAttribute<NotMappedAttribute>() &&
+                DbContext.AllowedSqlTypes.Contains(pi.PropertyType))
+            .Select(pi => pi.Name)
+            .ToArray();
+
+        return columns;
     }
 
     private void MapAllRelations()
@@ -213,7 +257,39 @@ public abstract class DbContext
     private void MapNavigationProperties<TEntity>(DbSet<TEntity> dbSet)
         where TEntity : class, new()
     {
+        Type entityType = typeof(TEntity);
 
+        PropertyInfo[] foreignKeys = entityType
+            .GetProperties()
+            .Where(pi => pi.HasAttribute<ForeignKeyAttribute>())
+            .ToArray();
+
+        foreach (PropertyInfo foreignKey in foreignKeys)
+        {
+            string navigationPropertyName = foreignKey
+                .GetCustomAttribute<ForeignKeyAttribute>().Name;
+
+            PropertyInfo navigationProperty = entityType
+                .GetProperty(navigationPropertyName);
+
+            IEnumerable<object> navigationDbSet = (IEnumerable<object>)this._dbSetProperties[navigationProperty.PropertyType]
+                .GetValue(this);
+
+            PropertyInfo navigationEntityPrimaryKey = navigationProperty.PropertyType
+                .GetProperties()
+                .First(pi => pi.HasAttribute<KeyAttribute>());
+
+            foreach (TEntity entity in dbSet)
+            {
+                object foreignKeyValue = foreignKey.GetValue(entity);
+
+                object navPropertyValue = navigationDbSet
+                    .First(cnp => navigationEntityPrimaryKey
+                            .GetValue(cnp).Equals(foreignKeyValue));
+
+                navigationProperty.SetValue(entity, navPropertyValue);
+            }
+        }
     }
 
     private void MapCollection<TEntity, TCollection>(DbSet<TEntity> dbSet, PropertyInfo collection)
