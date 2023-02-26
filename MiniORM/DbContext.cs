@@ -12,15 +12,15 @@ using Microsoft.Data.SqlClient;
 /// </summary>
 public abstract class DbContext
 {
-    private readonly DatabaseConnection connection;
-    private readonly IDictionary<Type, PropertyInfo> dbSetProperties;
+    private readonly DatabaseConnection _connection;
+    private readonly IDictionary<Type, PropertyInfo> _dbSetProperties;
 
     public DbContext(string connectionString)
     {
-        this.connection = new DatabaseConnection(connectionString);
-        this.dbSetProperties = this.DiscoverDbSets();
+        this._connection = new DatabaseConnection(connectionString);
+        this._dbSetProperties = this.DiscoverDbSets();
 
-        using (new ConnectionManager(connection))
+        using (new ConnectionManager(_connection))
         {
             this.InitializeDbSets();
         }
@@ -42,7 +42,7 @@ public abstract class DbContext
 
     public void SaveChanges()
     {
-        object[] dbSets = this.dbSetProperties
+        object[] dbSets = this._dbSetProperties
             .Select(dbSetInfo => dbSetInfo.Value.GetValue(this))
             .ToArray();
 
@@ -59,13 +59,14 @@ public abstract class DbContext
             }
         }
 
-        using (new ConnectionManager(this.connection))
+        using (new ConnectionManager(this._connection))
         {
-            using SqlTransaction transaction = this.connection.StartTransaction();
+            using SqlTransaction transaction = this._connection.StartTransaction();
 
             foreach (IEnumerable dbSet in dbSets)
             {
                 Type dbSetType = dbSet.GetType().GetGenericArguments().First();
+
                 MethodInfo persistMethod = typeof(DbContext)
                     .GetMethod("Persist", BindingFlags.Instance | BindingFlags.NonPublic)
                     .MakeGenericMethod(dbSetType);
@@ -76,7 +77,7 @@ public abstract class DbContext
                 }
                 catch (TargetInvocationException tie)
                 {
-                    // No need of rollback because Persist<T> method was never invoked!
+                    // No need of rollback because Persist<T> method was never invoked.
                     throw tie.InnerException;
                 }
                 catch (InvalidOperationException)
@@ -95,7 +96,6 @@ public abstract class DbContext
         }
     }
 
-    // We do not use this Validator in real projects!
     private bool IsObjectValid(object o)
     {
         ValidationContext validationContext = new ValidationContext(o);
@@ -109,34 +109,38 @@ public abstract class DbContext
         where TEntity : class, new()
     {
         string tableName = this.GetTableName(typeof(TEntity));
-        string[] columns = this.connection
+
+        string[] columns = this._connection
             .FetchColumnNames(tableName)
             .ToArray();
+
         if (dbSet.ChangeTracker.Added.Any())
         {
-            this.connection.InsertEntities(dbSet.ChangeTracker.Added, tableName, columns);
+            this._connection.InsertEntities(dbSet.ChangeTracker.Added, tableName, columns);
         }
 
         IEnumerable<TEntity> modifiedEntities = dbSet.ChangeTracker
             .GetModifiedEntities(dbSet)
             .ToArray();
+
         if (modifiedEntities.Any())
         {
-            this.connection.UpdateEntities(modifiedEntities, tableName, columns);
+            this._connection.UpdateEntities(modifiedEntities, tableName, columns);
         }
 
         if (dbSet.ChangeTracker.Removed.Any())
         {
-            this.connection.DeleteEntities(dbSet.ChangeTracker.Removed, tableName, columns);
+            this._connection.DeleteEntities(dbSet.ChangeTracker.Removed, tableName, columns);
         }
     }
 
     private string GetTableName(Type tableType)
     {
         string tableName = tableType.GetCustomAttribute<TableAttribute>()?.Name;
+
         if (tableName == null)
         {
-            tableName = this.dbSetProperties[tableType].Name;
+            tableName = this._dbSetProperties[tableType].Name;
         }
 
         return tableName;
@@ -148,12 +152,13 @@ public abstract class DbContext
             .GetProperties()
             .Where(pi => pi.PropertyType.GetGenericTypeDefinition() == typeof(DbSet<>))
             .ToDictionary(pi => pi.PropertyType.GetGenericArguments().First(), pi => pi);
+
         return dbSets;
     }
 
     private void InitializeDbSets()
     {
-        foreach (KeyValuePair<Type, PropertyInfo> dbSetInfo in this.dbSetProperties)
+        foreach (KeyValuePair<Type, PropertyInfo> dbSetInfo in this._dbSetProperties)
         {
             Type dbSetType = dbSetInfo.Key;
             PropertyInfo dbSetProperty = dbSetInfo.Value;
@@ -180,7 +185,7 @@ public abstract class DbContext
         string[] columns = this.GetEntityColumnNames(entityType);
         string tableName = this.GetTableName(entityType);
 
-        IEnumerable<TEntity> fetchedRows = this.connection
+        IEnumerable<TEntity> fetchedRows = this._connection
             .FetchResultSet<TEntity>(tableName, columns)
             .ToArray();
         return fetchedRows;
@@ -189,7 +194,7 @@ public abstract class DbContext
     private string[] GetEntityColumnNames(Type entityType)
     {
         string tableName = this.GetTableName(entityType);
-        string[] dbColumns = this.connection
+        string[] dbColumns = this._connection
             .FetchColumnNames(tableName)
             .ToArray();
 
@@ -205,7 +210,7 @@ public abstract class DbContext
 
     private void MapAllRelations()
     {
-        foreach (KeyValuePair<Type, PropertyInfo> dbSetInfo in this.dbSetProperties)
+        foreach (KeyValuePair<Type, PropertyInfo> dbSetInfo in this._dbSetProperties)
         {
             Type dbSetEntityType = dbSetInfo.Key;
             object dbSetInstance = dbSetInfo.Value.GetValue(this);
@@ -256,7 +261,7 @@ public abstract class DbContext
             PropertyInfo navigationProperty = entityType
                 .GetProperty(navigationPropertyName);
 
-            IEnumerable<object> navigationDbSet = (IEnumerable<object>)this.dbSetProperties[navigationProperty.PropertyType]
+            IEnumerable<object> navigationDbSet = (IEnumerable<object>)this._dbSetProperties[navigationProperty.PropertyType]
                 .GetValue(this);
             PropertyInfo navigationEntityPK = navigationProperty.PropertyType
                 .GetProperties()
@@ -300,7 +305,7 @@ public abstract class DbContext
                     .PropertyType == entityType);
         }
 
-        DbSet<TCollection> navigationDbSet = (DbSet<TCollection>)this.dbSetProperties[collectionType]
+        DbSet<TCollection> navigationDbSet = (DbSet<TCollection>)this._dbSetProperties[collectionType]
             .GetValue(this);
         foreach (TEntity entity in dbSet)
         {

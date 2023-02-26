@@ -39,6 +39,7 @@ public class DbSet<TEntity> : ICollection<TEntity>
         }
 
         bool isRemoved = this.Entities.Remove(entity);
+
         if (isRemoved)
         {
             this.ChangeTracker.Remove(entity);
