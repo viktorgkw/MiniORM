@@ -7,7 +7,7 @@ using Microsoft.Data.SqlClient;
 /// Used for accessing a database, inserting/updating/deleting entities
 /// and mapping database columns to entity classes.
 /// </summary>
-public class DatabaseConnection
+internal class DatabaseConnection
 {
     private readonly SqlConnection connection;
 

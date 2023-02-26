@@ -12,15 +12,17 @@ public class DbSet<TEntity> : ICollection<TEntity>
         this.ChangeTracker = new ChangeTracker<TEntity>(entities);
     }
 
-    public int Count => this.Entities.Count;
-    public bool IsReadOnly => this.Entities.IsReadOnly;
-
     internal ChangeTracker<TEntity> ChangeTracker { get; set; }
+
     internal IList<TEntity> Entities { get; set; }
+
+    public int Count => this.Entities.Count;
+
+    public bool IsReadOnly => this.Entities.IsReadOnly;
 
     public void Add(TEntity entity)
     {
-        if (entity is null)
+        if (entity == null)
         {
             throw new ArgumentNullException(nameof(entity), ExceptionMessages.EntityNullException);
         }
@@ -31,7 +33,7 @@ public class DbSet<TEntity> : ICollection<TEntity>
 
     public bool Remove(TEntity entity)
     {
-        if (entity is null)
+        if (entity == null)
         {
             throw new ArgumentNullException(nameof(entity), ExceptionMessages.EntityNullException);
         }
@@ -65,10 +67,11 @@ public class DbSet<TEntity> : ICollection<TEntity>
     public bool Contains(TEntity item)
         => this.Entities.Contains(item);
 
-    // Derived but we won't use it.
+    // We won't use this method anywhere but it's derived from ICollection<T>.
     public void CopyTo(TEntity[] array, int arrayIndex)
         => this.Entities.CopyTo(array, arrayIndex);
 
+    // This will allow our DbSet<TEntity> to work with ForEach loop.
     public IEnumerator<TEntity> GetEnumerator()
         => this.Entities.GetEnumerator();
 
